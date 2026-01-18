@@ -9,8 +9,6 @@ console = Console()
 
 def run_showdown():
     # --- The Challenge ---
-    # Finding issues by a specific user often requires looking past Page 1.
-    # RPC SDK handles this loop. REST Agent usually fails or burns tokens trying.
     TARGET_REPO = "pandas-dev/pandas"
     TARGET_USER = "mroeschke"
     LIMIT = 3
@@ -32,6 +30,8 @@ def run_showdown():
         tools_map={"get_issues_rpc": sdk.get_issues},
         tool_schemas=[get_rpc_tool_schema()],
     )
+    # Fix 1: We don't need to store the variable if we don't use it
+    rpc_agent.run(prompt)
 
     # --- CONTENDER 2: REST AGENT ---
     console.print("\n[bold red]=== Round 2: The Raw REST Agent ===[/bold red]")
@@ -41,6 +41,8 @@ def run_showdown():
         tools_map={"make_http_request": make_http_request},
         tool_schemas=[get_rest_tool_schema()],
     )
+    # Fix 2: Discard variable
+    rest_agent.run(prompt, max_steps=8)
 
     # --- THE VERDICT ---
     print_scoreboard(rpc_agent, rest_agent)
@@ -53,6 +55,12 @@ def print_scoreboard(agent_a, agent_b):
     table.add_column(f"{agent_a.name} (RPC)", style="green")
     table.add_column(f"{agent_b.name} (REST)", style="red")
 
+    # Determine status
+    a_success = "✅ Success" if agent_a.steps_taken < 8 else "❌ Failed"
+    b_success = "✅ Success" if agent_b.steps_taken < 8 else "❌ Failed/Struggle"
+
+    # Fix 3: Actually add the Status row to the table!
+    table.add_row("Outcome", a_success, b_success)
     table.add_row("Steps Taken", str(agent_a.steps_taken), str(agent_b.steps_taken))
     table.add_row("Total Tokens", str(agent_a.total_tokens), str(agent_b.total_tokens))
 
