@@ -3,11 +3,6 @@ from src.config import Config
 
 
 class GithubSDK:
-    """
-    The 'Agent-Native' SDK.
-    It handles pagination, auth, and data cleaning internally.
-    """
-
     BASE_URL = "https://api.github.com"
 
     def __init__(self):
@@ -17,25 +12,30 @@ class GithubSDK:
         }
 
     def get_issues(
-        self, repo_name: str, limit: int = 10, state: str = "open"
+        self, repo_name: str, limit: int = 10, state: str = "open", creator: str = None
     ) -> list[dict]:
         """
-        Retrieves a specific number of issues.
-        Automatically handles pagination logic.
+        Retrieves issues, optionally filtering by a specific creator.
         """
         issues = []
         page = 1
-        per_page = 30  # GitHub default max is usually 100, but we use 30 to force pagination logic to run earlier for the demo
+        per_page = 30
 
-        print(f"   [SDK Internal] Starting fetch loop for {limit} issues...")
+        # Log that we are using the optimized path
+        if creator:
+            print(
+                f"   [SDK Internal] ⚡ Optimized Search: Filtering for creator '{creator}' on Server Side."
+            )
+        else:
+            print(f"   [SDK Internal] Starting fetch loop for {limit} issues...")
 
         while len(issues) < limit:
-            # 1. Calculate how many we still need
-            remaining = limit - len(issues)  # noqa: F841
-
-            # 2. Make the Request
             url = f"{self.BASE_URL}/repos/{repo_name}/issues"
+
+            # Param Logic
             params = {"state": state, "per_page": per_page, "page": page}
+            if creator:
+                params["creator"] = creator
 
             try:
                 resp = requests.get(url, headers=self.headers, params=params)
@@ -45,17 +45,16 @@ class GithubSDK:
                 return [{"error": str(e)}]
 
             if not data:
-                break  # No more data available
+                break
 
-            # 3. Add to our list
             for item in data:
-                # Only keep fields the agent cares about (saving tokens!)
                 issues.append(
                     {
                         "number": item["number"],
                         "title": item["title"],
                         "user": item["user"]["login"],
                         "state": item["state"],
+                        "created_at": item["created_at"],
                     }
                 )
                 if len(issues) >= limit:
@@ -67,16 +66,12 @@ class GithubSDK:
         return issues
 
 
-# --- OpenAI Tool Definition ---
-
-
 def get_rpc_tool_schema():
-    """Returns the JSON schema for the OpenAI Chat API."""
     return {
         "type": "function",
         "function": {
             "name": "get_issues_rpc",
-            "description": "Fetch a list of issues from a GitHub repository. Handles pagination automatically.",
+            "description": "Fetch a list of issues from a GitHub repository. Handles pagination and filtering automatically.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -86,12 +81,12 @@ def get_rpc_tool_schema():
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "The maximum number of issues to return. Default is 10.",
+                        "description": "The maximum number of issues to return.",
                     },
-                    "state": {
+                    "state": {"type": "string", "enum": ["open", "closed", "all"]},
+                    "creator": {
                         "type": "string",
-                        "enum": ["open", "closed", "all"],
-                        "description": "Filter by issue state.",
+                        "description": "Filter issues created by a specific username.",
                     },
                 },
                 "required": ["repo_name"],
