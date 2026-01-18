@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    container_name: agent_patterns
+    volumes:
+      - .:/app
+    # We will create the .env file in the next issue, 
+    # but Docker needs to know it might exist.
+    env_file:
+      - .env
+    command: tail -f /dev/null
